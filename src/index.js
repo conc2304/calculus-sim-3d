@@ -13,13 +13,16 @@ import {
   MeshBasicMaterial,
   CircleGeometry,
   SphereGeometry,
+  Spherical,
   Vector3
 } from 'three'
+
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
 import { SampleShaderMaterial } from './materials/SampleShaderMaterial'
 import { gltfLoader } from './loaders'
+import { getAngle } from './utils/index.js'
 
 class App {
   #resizeCallback = () => this.#onResize()
@@ -33,7 +36,7 @@ class App {
 
     // Simulation Variables // TODO add ui
     this.lakeRadius = 5;
-    this.duckSpeed = 1;
+    this.duckSpeed = 0.3;
     this.stepSize = 0.1;
     this.foxSpeed = 1;
   }
@@ -55,6 +58,7 @@ class App {
 
     // this.#createBox()
     // this.#createShadedBox()
+    this.#createTarget();
     this.#createLake()
     this.#createDuck()
     this.#createFox()
@@ -110,34 +114,62 @@ class App {
     // this.fox
     // this.duck
 
+    // console.log("duck: ", this.duck.position);
+    // console.log("fox: ", this.fox.position);
 
 
     // Make the duck go in the opposite direction of the fox
-
-    // Get the vector of the direction of movement
-    // const duckDirection = this.duck.position - this.fox.position;
-    console.log("duck: ", this.duck.position);
-    console.log("fox: ", this.fox.position);
-
-
     const duckDirection = new Vector3()
     duckDirection.copy(this.duck.position)
     duckDirection.sub(this.fox.position);
-
     duckDirection.y = 0;  // do not change the y direction
     duckDirection.normalize();
-    console.log("duckDirection: ", duckDirection);
 
-    const newPosition = new Vector3().copy(this.duck.position);
+    const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize);
+    this.duck.position.add(movement);
+
+    // Get the point on the lake's radius where the duck is going towards
+    const sphericalDuckPos = new Spherical();
+    sphericalDuckPos.setFromVector3(this.duck.position);
+    const duckAngle = getAngle(sphericalDuckPos.theta);
+    const duckRadius = sphericalDuckPos.radius;
+    const targetPoint = new Spherical(this.lakeRadius, Math.PI / 2, duckAngle);
+    this.target.position.setFromSpherical(targetPoint);
+
+    // Get the direction of the fox around the lake
+    const sphericalFoxPos = new Spherical();
+    sphericalFoxPos.setFromVector3(this.fox.position);
+    const foxAngle = getAngle(sphericalFoxPos.theta);
+    const deltaTheta = duckAngle - foxAngle;
+    // if deltaTheta > PI || deltaTHea < 0 => move clockwise
+    // console.log({ deltaTheta, foxAngle, duckAngle })
+    const direction = deltaTheta > Math.PI || deltaTheta < 0 ? -1 : 1;
+
+    // Move the fox in the direction of the duck
+    const angularVel = this.foxSpeed / this.lakeRadius
+    const newFoxAngle = foxAngle + (direction * angularVel * this.stepSize)
+    this.fox.position.setFromSpherical(new Spherical(this.lakeRadius, Math.PI / 2, newFoxAngle))
+    this.fox.position.add(new Vector3(0, 0.25, 0));
+
+    // Check if the duck can make it to the shore before the fox
+    // If it can then just go straight
 
 
-    // newPosition.add( this.duckSpeed * this.stepSize)
-    console.log(this.duck.speed * this.stepSize);
-    const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize)
-    console.log("movement: ", movement)
-    // const newPosition = this.duck.position + duckDirectionNorm * this.duckSpeed * this.stepSize;
-    console.log("new Position: ", newPosition)
-    this.duck.position.add(movement)
+    // Example Cartesian coordinates (x, y, z)
+    let point = new Vector3(10, 0, 10);
+    // Convert to spherical coordinates
+    let spherical = new Spherical();
+    spherical.setFromVector3(point);
+    // Convert to Cartesian coordinates using setFromSpherical()
+    let cartesian = new Vector3().setFromSpherical(spherical);
+
+
+    // const w = v/r
+    // theta n+1 = theta n + w * h
+
+    if (duckRadius >= this.lakeRadius) {
+      this.duck.position.add(new Vector3(0, 0.01, 0))
+    }
 
 
   }
@@ -228,6 +260,15 @@ class App {
     this.scene.add(this.lake);
   }
 
+  #createTarget() {
+    const radius = 0.125;
+    const geometry = new SphereGeometry(radius, 32)
+    const material = new MeshBasicMaterial({ color: 0xff0000 });
+    this.target = new Mesh(geometry, material)
+    this.target.position.set(0, radius, 0)
+    this.scene.add(this.target);
+  }
+
   #createDuck() {
     const geometry = new SphereGeometry(0.25, 32, 32);
     const material = new MeshBasicMaterial({ color: 0xffff00 });
@@ -248,10 +289,10 @@ class App {
     const square = new Mesh(geometry, material);
     this.fox = square;
 
-    this.fox.speed = 0;
+    this.fox.speed = this.foxSpeed;
     this.fox.direction = new Vector3(0, 0, 0);
 
-    this.fox.position.set(this.lakeRadius, foxSize / 2, 0); // Position on the perimeter of the disc
+    this.fox.position.set(-this.lakeRadius, foxSize / 2, 0); // Position on the perimeter of the disc
     this.fox.rotation.y = Math.PI / 4; // Optional rotation for aesthetics
     this.scene.add(this.fox);
   }
