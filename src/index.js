@@ -12,7 +12,8 @@ import {
   PlaneGeometry,
   MeshBasicMaterial,
   CircleGeometry,
-  SphereGeometry
+  SphereGeometry,
+  Vector3
 } from 'three'
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
@@ -29,7 +30,12 @@ class App {
 
     this.hasPhysics = opts.physics
     this.hasDebug = opts.debug
+
+    // Simulation Variables // TODO add ui
     this.lakeRadius = 5;
+    this.duckSpeed = 1;
+    this.stepSize = 0.1;
+    this.foxSpeed = 1;
   }
 
   async init() {
@@ -94,8 +100,49 @@ class App {
       this.shadedBox.rotation.z = elapsed * 0.6
     }
 
+    this.#updateSimulation()
+
     this.simulation?.update()
   }
+
+  #updateSimulation() {
+    // Update fox and duck position
+    // this.fox
+    // this.duck
+
+
+
+    // Make the duck go in the opposite direction of the fox
+
+    // Get the vector of the direction of movement
+    // const duckDirection = this.duck.position - this.fox.position;
+    console.log("duck: ", this.duck.position);
+    console.log("fox: ", this.fox.position);
+
+
+    const duckDirection = new Vector3()
+    duckDirection.copy(this.duck.position)
+    duckDirection.sub(this.fox.position);
+
+    duckDirection.y = 0;  // do not change the y direction
+    duckDirection.normalize();
+    console.log("duckDirection: ", duckDirection);
+
+    const newPosition = new Vector3().copy(this.duck.position);
+
+
+    // newPosition.add( this.duckSpeed * this.stepSize)
+    console.log(this.duck.speed * this.stepSize);
+    const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize)
+    console.log("movement: ", movement)
+    // const newPosition = this.duck.position + duckDirectionNorm * this.duckSpeed * this.stepSize;
+    console.log("new Position: ", newPosition)
+    this.duck.position.add(movement)
+
+
+  }
+
+
 
   #render() {
     this.renderer.render(this.scene, this.camera)
@@ -107,7 +154,7 @@ class App {
 
   #createCamera() {
     this.camera = new PerspectiveCamera(75, this.screen.x / this.screen.y, 0.1, 100)
-    this.camera.position.set(-0.7, 0.8, 3)
+    this.camera.position.set(0, 20, 0)
   }
 
   #createRenderer() {
@@ -186,16 +233,25 @@ class App {
     const material = new MeshBasicMaterial({ color: 0xffff00 });
     const sphere = new Mesh(geometry, material);
     this.duck = sphere;
+
+    this.duck.speed = this.duckSpeed;
+    this.duck.direction = new Vector3(0, 0, 0);
+
     this.duck.position.y = 0.25; // Adjust height above disc
     this.scene.add(this.duck);
   }
 
   #createFox() {
-    const geometry = new BoxGeometry(0.5, 0.5, 0.5); // Create a thin square
+    const foxSize = 0.5;
+    const geometry = new BoxGeometry(foxSize, foxSize, foxSize); // Create a thin square
     const material = new MeshBasicMaterial({ color: 0xffa500 });
     const square = new Mesh(geometry, material);
     this.fox = square;
-    this.fox.position.set(this.lakeRadius, 0.25, 0); // Position on the perimeter of the disc
+
+    this.fox.speed = 0;
+    this.fox.direction = new Vector3(0, 0, 0);
+
+    this.fox.position.set(this.lakeRadius, foxSize / 2, 0); // Position on the perimeter of the disc
     this.fox.rotation.y = Math.PI / 4; // Optional rotation for aesthetics
     this.scene.add(this.fox);
   }
