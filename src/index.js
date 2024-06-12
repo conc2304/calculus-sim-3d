@@ -16,7 +16,7 @@ import {
   Spherical,
   Vector3
 } from 'three'
-
+import { matrix, multiply } from 'mathjs';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
@@ -109,14 +109,10 @@ class App {
     this.simulation?.update()
   }
 
+  #timeScale = 0.5;
+
   #updateSimulation() {
     // Update fox and duck position
-    // this.fox
-    // this.duck
-
-    // console.log("duck: ", this.duck.position);
-    // console.log("fox: ", this.fox.position);
-
 
     // Make the duck go in the opposite direction of the fox
     const duckDirection = new Vector3()
@@ -125,7 +121,12 @@ class App {
     duckDirection.y = 0;  // do not change the y direction
     duckDirection.normalize();
 
-    const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize);
+    const duckRotation = matrix([
+      [this.duck.position.x], [this.duck.position.z]]
+    );
+
+    const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize * this.#timeScale);
+    // const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize );
     this.duck.position.add(movement);
 
     // Get the point on the lake's radius where the duck is going towards
@@ -133,39 +134,51 @@ class App {
     sphericalDuckPos.setFromVector3(this.duck.position);
     const duckAngle = getAngle(sphericalDuckPos.theta);
     const duckRadius = sphericalDuckPos.radius;
+
+    // The point on the perimeter where the duck should head to
     const targetPoint = new Spherical(this.lakeRadius, Math.PI / 2, duckAngle);
     this.target.position.setFromSpherical(targetPoint);
 
     // Get the direction of the fox around the lake
     const sphericalFoxPos = new Spherical();
     sphericalFoxPos.setFromVector3(this.fox.position);
-    const foxAngle = getAngle(sphericalFoxPos.theta);
-    const deltaTheta = duckAngle - foxAngle;
+    const foxAngle = sphericalFoxPos.theta;
+    const foxRotation = matrix(
+      [
+        [Math.cos(foxAngle), Math.sin(foxAngle)],
+        [-Math.sin(foxAngle), Math.cos(foxAngle)]
+      ]
+    );
+
+    // Calculate the change in direction, position of the duck
+    const tempDuckRotation = multiply(foxRotation, duckRotation);
+    const tempDuckPos = new Vector3(tempDuckRotation.get([0, 0]), 0, tempDuckRotation.get([1, 0]));
+    const tempDuckPosSpherical = new Spherical().setFromVector3(tempDuckPos);
+    const deltaTheta = tempDuckPosSpherical.theta;
     // if deltaTheta > PI || deltaTHea < 0 => move clockwise
-    // console.log({ deltaTheta, foxAngle, duckAngle })
-    const direction = deltaTheta > Math.PI || deltaTheta < 0 ? -1 : 1;
+    const direction = deltaTheta < 0 || deltaTheta > Math.PI ? -1 : 1;
+
+    console.log({ direction, deltaTheta, foxAngle, deltaTheta });
 
     // Move the fox in the direction of the duck
     const angularVel = this.foxSpeed / this.lakeRadius
-    const newFoxAngle = foxAngle + (direction * angularVel * this.stepSize)
+    const newFoxAngle = foxAngle + (direction * angularVel * this.stepSize * this.#timeScale)
     this.fox.position.setFromSpherical(new Spherical(this.lakeRadius, Math.PI / 2, newFoxAngle))
     this.fox.position.add(new Vector3(0, 0.25, 0));
 
+
+    // TODO
     // Check if the duck can make it to the shore before the fox
     // If it can then just go straight
 
+    // // Example Cartesian coordinates (x, y, z)
+    // let point = new Vector3(10, 0, 10);
+    // // Convert to spherical coordinates
+    // let spherical = new Spherical();
+    // spherical.setFromVector3(point);
+    // // Convert to Cartesian coordinates using setFromSpherical()
+    // let cartesian = new Vector3().setFromSpherical(spherical);
 
-    // Example Cartesian coordinates (x, y, z)
-    let point = new Vector3(10, 0, 10);
-    // Convert to spherical coordinates
-    let spherical = new Spherical();
-    spherical.setFromVector3(point);
-    // Convert to Cartesian coordinates using setFromSpherical()
-    let cartesian = new Vector3().setFromSpherical(spherical);
-
-
-    // const w = v/r
-    // theta n+1 = theta n + w * h
 
     if (duckRadius >= this.lakeRadius) {
       this.duck.position.add(new Vector3(0, 0.01, 0))
