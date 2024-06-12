@@ -45,7 +45,9 @@ class App {
     this.#createScene()
     this.#createCamera()
     this.#createRenderer()
+    this.#setupButton()
 
+    this.stop = false;
     if (this.hasPhysics) {
       const { Simulation } = await import('./physics/Simulation')
       this.simulation = new Simulation(this)
@@ -88,7 +90,6 @@ class App {
       this.stats?.end()
     })
 
-    console.log(this)
   }
 
   destroy() {
@@ -109,9 +110,12 @@ class App {
     this.simulation?.update()
   }
 
-  #timeScale = 0.5;
+  timeScale = 0.5;
 
   #updateSimulation() {
+
+    if (this.stop === true) return; // Pause Animation for debugging
+
     // Update fox and duck position
 
     // Make the duck go in the opposite direction of the fox
@@ -125,15 +129,16 @@ class App {
       [this.duck.position.x], [this.duck.position.z]]
     );
 
-    const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize * this.#timeScale);
-    // const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize );
-    this.duck.position.add(movement);
+    // const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize * this.timeScale);
+    // this.duck.position.add(movement);
 
     // Get the point on the lake's radius where the duck is going towards
     const sphericalDuckPos = new Spherical();
     sphericalDuckPos.setFromVector3(this.duck.position);
     const duckAngle = getAngle(sphericalDuckPos.theta);
     const duckRadius = sphericalDuckPos.radius;
+    const duckToShoreDistance = this.lakeRadius - sphericalDuckPos.radius;
+    const duckToTargetTime = duckToShoreDistance / this.duckSpeed;
 
     // The point on the perimeter where the duck should head to
     const targetPoint = new Spherical(this.lakeRadius, Math.PI / 2, duckAngle);
@@ -145,8 +150,8 @@ class App {
     const foxAngle = sphericalFoxPos.theta;
     const foxRotation = matrix(
       [
-        [Math.cos(foxAngle), Math.sin(foxAngle)],
-        [-Math.sin(foxAngle), Math.cos(foxAngle)]
+        [Math.cos(foxAngle), -Math.sin(foxAngle)],
+        [Math.sin(foxAngle), Math.cos(foxAngle)]
       ]
     );
 
@@ -155,36 +160,35 @@ class App {
     const tempDuckPos = new Vector3(tempDuckRotation.get([0, 0]), 0, tempDuckRotation.get([1, 0]));
     const tempDuckPosSpherical = new Spherical().setFromVector3(tempDuckPos);
     const deltaTheta = tempDuckPosSpherical.theta;
-    // if deltaTheta > PI || deltaTHea < 0 => move clockwise
-    const direction = deltaTheta < 0 || deltaTheta > Math.PI ? -1 : 1;
+    const foxToTargetTime = (this.lakeRadius * Math.abs(deltaTheta)) / this.foxSpeed;
 
-    console.log({ direction, deltaTheta, foxAngle, deltaTheta });
+    // if deltaTheta > PI || deltaTHea < 0 => move clockwise
+
+    const newDirection = deltaTheta < 0 || deltaTheta > Math.PI ? -1 : 1;
 
     // Move the fox in the direction of the duck
-    const angularVel = this.foxSpeed / this.lakeRadius
-    const newFoxAngle = foxAngle + (direction * angularVel * this.stepSize * this.#timeScale)
-    this.fox.position.setFromSpherical(new Spherical(this.lakeRadius, Math.PI / 2, newFoxAngle))
+    const angularVel = this.foxSpeed / this.lakeRadius;
+    const newFoxAngle = foxAngle + (newDirection * angularVel * this.stepSize * this.timeScale);
+    this.fox.position.setFromSpherical(new Spherical(this.lakeRadius, Math.PI / 2, newFoxAngle));
     this.fox.position.add(new Vector3(0, 0.25, 0));
 
-
     // TODO
-    // Check if the duck can make it to the shore before the fox
-    // If it can then just go straight
+    // If the duck can make it to the shore before the fox
 
-    // // Example Cartesian coordinates (x, y, z)
-    // let point = new Vector3(10, 0, 10);
-    // // Convert to spherical coordinates
-    // let spherical = new Spherical();
-    // spherical.setFromVector3(point);
-    // // Convert to Cartesian coordinates using setFromSpherical()
-    // let cartesian = new Vector3().setFromSpherical(spherical);
-
-
-    if (duckRadius >= this.lakeRadius) {
-      this.duck.position.add(new Vector3(0, 0.01, 0))
+    if (duckToTargetTime < foxToTargetTime * 0.975) {
+      // move duck straight to shore
+      sphericalDuckPos.radius += this.duckSpeed * this.stepSize * this.timeScale;
+      this.duck.position.setFromSpherical(sphericalDuckPos);
+    } else {
+      // move duck away from from
+      const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize * this.timeScale);
+      this.duck.position.add(movement);
     }
 
-
+    if (duckRadius >= this.lakeRadius) {
+      // fly away
+      this.duck.position.add(new Vector3(0, 0.01, 0))
+    }
   }
 
 
@@ -365,6 +369,16 @@ class App {
 
     this.renderer.setSize(this.screen.x, this.screen.y)
   }
+
+  #setupButton() {
+    const button = document.getElementById('pause-btn');
+    button.addEventListener('click', () => this.#toggleAnimation());
+  }
+
+  #toggleAnimation() {
+    this.stop = !this.stop;
+    console.log("Animation Toggled: " + (this.stop ? "Stopped" : "Running"));
+  }
 }
 
 window._APP_ = new App('#app', {
@@ -373,3 +387,12 @@ window._APP_ = new App('#app', {
 })
 
 window._APP_.init()
+
+
+// // Example Cartesian coordinates (x, y, z)
+// let point = new Vector3(10, 0, 10);
+// // Convert to spherical coordinates
+// let spherical = new Spherical();
+// spherical.setFromVector3(point);
+// // Convert to Cartesian coordinates using setFromSpherical()
+// let cartesian = new Vector3().setFromSpherical(spherical);
