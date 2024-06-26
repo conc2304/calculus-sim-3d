@@ -120,23 +120,12 @@ class App {
     console.log("fox: ", this.fox.position);
 
 
-    const duckDirection = new Vector3()
-    duckDirection.copy(this.duck.position)
+    const duckDirection = new Vector3().copy(this.duck.position)
     duckDirection.sub(this.fox.position);
-
     duckDirection.y = 0;  // do not change the y direction
     duckDirection.normalize();
-    console.log("duckDirection: ", duckDirection);
 
-    const newPosition = new Vector3().copy(this.duck.position);
-
-
-    // newPosition.add( this.duckSpeed * this.stepSize)
-    console.log(this.duck.speed * this.stepSize);
     const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize)
-    console.log("movement: ", movement)
-    // const newPosition = this.duck.position + duckDirectionNorm * this.duckSpeed * this.stepSize;
-    console.log("new Position: ", newPosition)
     this.duck.position.add(movement)
 
 
@@ -221,8 +210,7 @@ class App {
     const radius = this.lakeRadius;
     const geometry = new CircleGeometry(radius, 32); // Radius 5 for diameter of 10
     const material = new MeshBasicMaterial({ color: 0x0000ff });
-    const disc = new Mesh(geometry, material);
-    this.lake = disc;
+    this.lake = new Mesh(geometry, material);
     this.lake.position.set(0, 0.01, 0);
     disc.rotation.x = -Math.PI / 2;
     this.scene.add(this.lake);
