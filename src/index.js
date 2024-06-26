@@ -53,18 +53,11 @@ class App {
       Object.assign(this, { PhysicsBox, PhysicsFloor })
     }
 
-    // this.#createBox()
-    // this.#createShadedBox()
-    this.#createLake()
-    this.#createDuck()
-    this.#createFox()
     this.#createLight()
-    this.#createFloor()
     this.#createClock()
     this.#addListeners()
     this.#createControls()
 
-    // await this.#loadModel()
 
     if (this.hasDebug) {
       const { Debug } = await import('./Debug.js')
@@ -106,27 +99,6 @@ class App {
   }
 
   #updateSimulation() {
-    // Update fox and duck position
-    // this.fox
-    // this.duck
-
-
-
-    // Make the duck go in the opposite direction of the fox
-
-    // Get the vector of the direction of movement
-    // const duckDirection = this.duck.position - this.fox.position;
-    console.log("duck: ", this.duck.position);
-    console.log("fox: ", this.fox.position);
-
-
-    const duckDirection = new Vector3().copy(this.duck.position)
-    duckDirection.sub(this.fox.position);
-    duckDirection.y = 0;  // do not change the y direction
-    duckDirection.normalize();
-
-    const movement = duckDirection.multiplyScalar(this.duck.speed * this.stepSize)
-    this.duck.position.add(movement)
 
 
   }
@@ -166,114 +138,12 @@ class App {
     this.scene.add(this.pointLight)
   }
 
-  /**
-   * Create a box with a PBR material
-   */
-  #createBox() {
-    const geometry = new BoxGeometry(1, 1, 1, 1, 1, 1)
 
-    const material = new MeshStandardMaterial({
-      color: 0xffffff,
-      metalness: 0.7,
-      roughness: 0.35
-    })
 
-    this.box = new Mesh(geometry, material)
-    this.box.position.x = -1.5
-    this.box.rotation.set(
-      Math.random() * Math.PI,
-      Math.random() * Math.PI,
-      Math.random() * Math.PI
-    )
 
-    this.scene.add(this.box)
 
-    if (!this.hasPhysics) return
 
-    const body = new this.PhysicsBox(this.box, this.scene)
-    this.simulation.addItem(body)
-  }
 
-  /**
-   * Create a box with a custom ShaderMaterial
-   */
-  #createShadedBox() {
-    const geometry = new BoxGeometry(1, 1, 1, 1, 1, 1)
-
-    this.shadedBox = new Mesh(geometry, SampleShaderMaterial)
-    this.shadedBox.position.x = 1.5
-
-    this.scene.add(this.shadedBox)
-  }
-
-  #createLake() {
-    const radius = this.lakeRadius;
-    const geometry = new CircleGeometry(radius, 32); // Radius 5 for diameter of 10
-    const material = new MeshBasicMaterial({ color: 0x0000ff });
-    this.lake = new Mesh(geometry, material);
-    this.lake.position.set(0, 0.01, 0);
-    disc.rotation.x = -Math.PI / 2;
-    this.scene.add(this.lake);
-  }
-
-  #createDuck() {
-    const geometry = new SphereGeometry(0.25, 32, 32);
-    const material = new MeshBasicMaterial({ color: 0xffff00 });
-    const sphere = new Mesh(geometry, material);
-    this.duck = sphere;
-
-    this.duck.speed = this.duckSpeed;
-    this.duck.direction = new Vector3(0, 0, 0);
-
-    this.duck.position.y = 0.25; // Adjust height above disc
-    this.scene.add(this.duck);
-  }
-
-  #createFox() {
-    const foxSize = 0.5;
-    const geometry = new BoxGeometry(foxSize, foxSize, foxSize); // Create a thin square
-    const material = new MeshBasicMaterial({ color: 0xffa500 });
-    const square = new Mesh(geometry, material);
-    this.fox = square;
-
-    this.fox.speed = 0;
-    this.fox.direction = new Vector3(0, 0, 0);
-
-    this.fox.position.set(this.lakeRadius, foxSize / 2, 0); // Position on the perimeter of the disc
-    this.fox.rotation.y = Math.PI / 4; // Optional rotation for aesthetics
-    this.scene.add(this.fox);
-  }
-
-  #createFloor() {
-    if (!this.hasPhysics) return
-
-    const geometry = new PlaneGeometry(20, 20, 1, 1)
-    const material = new MeshBasicMaterial({ color: 0x629928 })
-
-    this.floor = new Mesh(geometry, material)
-    this.floor.rotateX(-Math.PI * 0.5)
-    this.floor.position.set(0, 0, 0)
-
-    this.scene.add(this.floor)
-
-    const body = new this.PhysicsFloor(this.floor, this.scene)
-    this.simulation.addItem(body)
-  }
-
-  /**
-   * Load a 3D model and append it to the scene
-   */
-  async #loadModel() {
-    const gltf = await gltfLoader.load('/suzanne.glb')
-
-    const mesh = gltf.scene.children[0]
-    mesh.position.z = 1.5
-
-    mesh.material = SampleShaderMaterial.clone()
-    mesh.material.wireframe = true
-
-    this.scene.add(mesh)
-  }
 
   #createControls() {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
