@@ -11,10 +11,14 @@ import {
   Vector2,
   PlaneGeometry,
   MeshBasicMaterial,
+  ConeGeometry,
   CircleGeometry,
   SphereGeometry,
   Vector3
 } from 'three'
+
+
+import { Boid } from './objects/boid.js'
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
@@ -57,6 +61,7 @@ class App {
     this.#createClock()
     this.#addListeners()
     this.#createControls()
+    this.#createBoids()
 
 
     if (this.hasDebug) {
@@ -77,7 +82,6 @@ class App {
       this.stats?.end()
     })
 
-    console.log(this)
   }
 
   destroy() {
@@ -93,14 +97,36 @@ class App {
       this.shadedBox.rotation.z = elapsed * 0.6
     }
 
-    this.#updateSimulation()
+    this.#updateSimulation(elapsed)
 
     this.simulation?.update()
   }
 
-  #updateSimulation() {
+  #updateSimulation(elapsed) {
+
+    for(const boid of this.#boids) {
+      // console.log(boid.position)
+      boid.update(this.#boids, elapsed)
+      
+    }
+    console.log("UPDATED ALL BOIDS")
+
+  }
+
+  #boidsQty = 10;
+  #boids = [];
+
+  #createBoids() {
 
 
+
+    for (let i = 0; i < this.#boidsQty; i++) {
+      const boid = new Boid();
+
+      const boidMesh = boid.createBoid();
+      this.#boids[i] = boid;
+      this.scene.add(boidMesh);
+    } 
   }
 
 
@@ -114,8 +140,8 @@ class App {
   }
 
   #createCamera() {
-    this.camera = new PerspectiveCamera(75, this.screen.x / this.screen.y, 0.1, 100)
-    this.camera.position.set(0, 20, 0)
+    this.camera = new PerspectiveCamera(75, this.screen.x / this.screen.y, 0.1, 400)
+    this.camera.position.set(0, 0, 400)
   }
 
   #createRenderer() {
@@ -137,13 +163,6 @@ class App {
     this.pointLight.position.set(0, 10, 13)
     this.scene.add(this.pointLight)
   }
-
-
-
-
-
-
-
 
   #createControls() {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
