@@ -10,7 +10,7 @@ import {
     Line,
     BufferGeometry,
     Quaternion
-  } from 'three'
+} from 'three'
 
 import { getRandomInRange } from '../utils';
 import { Spherical } from 'three';
@@ -24,13 +24,13 @@ export class Boid {
 
         this.boidMesh;
 
-        this.updateAngle = -Math.PI/2; // account for initial position of 0
+        this.updateAngle = -Math.PI / 2; // account for initial position of 0
         this.startAngle = this.neighborhoodAngle + this.updateAngle; // Start angle in radians
         this.endAngle = -this.neighborhoodAngle + this.updateAngle; // End angle in radians
 
-        this.boidSpeed = 0.5;
+        this.boidSpeed = 0.2;
         this.initialVelocity = 1;
-        this.rotationSpeed = 0.5;
+        this.rotationSpeed = 0.02;
 
         this.weightOld = 0.5;
         this.weightAvg = 0.5;
@@ -38,15 +38,15 @@ export class Boid {
         this.id = generateUUID();
     }
 
-     createBoid() {
+    createBoid() {
         const boidHeight = 10;
         const boidWidth = 2.5;
-        const geometry = new ConeGeometry( boidWidth, boidHeight, 32 ); 
-        const material = new MeshBasicMaterial( {color: 0xffff00} );
-        const boid = new Mesh(geometry, material );
+        const geometry = new ConeGeometry(boidWidth, boidHeight, 32);
+        const material = new MeshBasicMaterial({ color: 0xffff00 });
+        const boid = new Mesh(geometry, material);
 
-        const neighborhood = this.createBoidSector(this.neighborhoodRadius, this.startAngle, this.endAngle, {color: 0x00ff00, opacity: 0.1});
-        const crowdingArea = this.createBoidSector(this.crowdingRadius, this.startAngle, this.endAngle, {color: 0xff0000, opacity: 0.45});
+        const neighborhood = this.createBoidSector(this.neighborhoodRadius, this.startAngle, this.endAngle, { color: 0x00ff00, opacity: 0.1 });
+        const crowdingArea = this.createBoidSector(this.crowdingRadius, this.startAngle, this.endAngle, { color: 0xff0000, opacity: 0.45 });
 
         const debugLine = this.createAngleLine();
 
@@ -54,8 +54,8 @@ export class Boid {
         boid.add(crowdingArea);
         boid.add(debugLine); // shows where angle 0 is
 
-        boid.position.set(getRandomInRange(-200,200), getRandomInRange(-200,200), 0)
-        boid.rotation.set(0,0, getRandomInRange(-Math.PI, Math.PI ))
+        boid.position.set(getRandomInRange(-200, 200), getRandomInRange(-200, 200), 0)
+        boid.rotation.set(0, 0, getRandomInRange(-Math.PI, Math.PI))
 
         this.boidMesh = boid;
         return boid;
@@ -64,15 +64,10 @@ export class Boid {
     createAngleLine() {
         const points = [];
         points.push(new Vector3(0, 0, 0));
-        points.push(new Vector3(this.neighborhoodRadius, 0, 0)); 
+        points.push(new Vector3(0, this.neighborhoodRadius, 0));
 
-        // 3. Create the geometry with these points
         const geometry = new BufferGeometry().setFromPoints(points);
-
-        // 4. Create a basic material
         const material = new LineBasicMaterial({ color: 0xff0000 });
-
-        // 5. Create the line with the geometry and material
         const line = new Line(geometry, material);
 
         return line;
@@ -100,10 +95,10 @@ export class Boid {
         shape.lineTo(centerX, centerY);
 
         const geometry = new ShapeGeometry(shape);
-        const material = new MeshBasicMaterial({ 
-            color: 0xff0000, 
+        const material = new MeshBasicMaterial({
+            color: 0xff0000,
             opacity: 0.15,
-            side: DoubleSide, 
+            side: DoubleSide,
             transparent: true,
             ...materialConf
         });
@@ -131,7 +126,7 @@ export class Boid {
 
         const tempSpherical = new Spherical();
         tempSpherical.setFromVector3(relativePos)
-        const {theta} = tempSpherical;
+        const { theta } = tempSpherical;
 
         // Rotate the vector
         relativePos.applyAxisAngle(axis, angle);
@@ -144,41 +139,39 @@ export class Boid {
     update(boidsList, elapsedTime) {
 
         // Move the boid forward in the direction of the heading
-        const avgHeading = this.getAverageHeading(boidsList);
         const currentHeading = this.getHeadingVector(this.boidMesh);
 
+        const avgHeading = this.getAverageHeading(boidsList);
         const WaHa = avgHeading.clone().multiplyScalar(this.weightAvg);
         const WoHc = currentHeading.clone().multiplyScalar(this.weightOld);
         const WoWa = this.weightOld + this.weightAvg;
 
         const numerator = new Vector3().addVectors(WoHc, WaHa);
-        const newHeading = numerator.clone().divideScalar(WoWa);
-        console.log(newHeading)
-        const angle = this.boidMesh.rotation.z - this.updateAngle
-        const v = new Vector3(Math.cos(angle), Math.sin(angle), 0);
+        const newHeading = numerator.clone().divideScalar(WoWa).normalize();  // Ensure it's a unit vector
 
-        
-        // Rotate the boid in the direction of the new heading
-        const quaternion = new Quaternion();
-        const up = new Vector3(0, 1, 0); // Define the up direction (Y-axis)
-        quaternion.setFromUnitVectors(up, newHeading);
-        this.boidMesh.quaternion.copy(quaternion)
+        // Calculate current and target quaternions
+        const currentQuaternion = this.boidMesh.quaternion.clone();
+        const targetQuaternion = new Quaternion();
+        targetQuaternion.setFromUnitVectors(new Vector3(0, 1, 0), newHeading);
+
+        // Spherical Linear Interpolation (slerp)
+        this.boidMesh.quaternion.slerpQuaternions(currentQuaternion, targetQuaternion, this.rotationSpeed * elapsedTime);
 
         // Move the boid in the direction of the new heading
-        this.boidMesh.position.add(newHeading.multiplyScalar(this.boidSpeed));
+        this.boidMesh.position.add(newHeading.multiplyScalar(this.boidSpeed * elapsedTime));
 
 
     }
 
     getAverageHeading(boids) {
-        let headingSum = new Vector3(0,0,0);
+        let headingSum = new Vector3(0, 0, 0);
         let count = 0;
         boids.forEach((boid) => {
             // Don't add self to average
             if (boid.id === this.id) return;
             // Only average boids in 
             if (!this.isBoidInSector(boid.boidMesh, this.neighborhoodRadius, this.startAngle)) return;
-            
+
             // console.log(`${boid.id} is in sector of ${this.id}`);
 
             const headingVector = this.getHeadingVector(boid.boidMesh);
@@ -193,9 +186,9 @@ export class Boid {
         const avgHeading = headingSum.clone().divideScalar(count);
 
         return avgHeading;
-      }
+    }
 
-      getHeadingVector(meshObject) {
+    getHeadingVector(meshObject) {
         // Create a vector pointing up the Y-axis (local forward direction)
         const forward = new Vector3(0, 1, 0);
         forward.normalize();
@@ -204,8 +197,8 @@ export class Boid {
         forward.applyQuaternion(meshObject.quaternion);
 
         return forward.normalize();
-      }
+    }
 
-    
+
 
 }

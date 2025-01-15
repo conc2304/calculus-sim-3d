@@ -104,10 +104,10 @@ class App {
 
   #updateSimulation(elapsed) {
 
-    for(const boid of this.#boids) {
+    for (const boid of this.#boids) {
       // console.log(boid.position)
       boid.update(this.#boids, elapsed)
-      
+
     }
     console.log("UPDATED ALL BOIDS")
 
@@ -118,15 +118,13 @@ class App {
 
   #createBoids() {
 
-
-
     for (let i = 0; i < this.#boidsQty; i++) {
       const boid = new Boid();
 
       const boidMesh = boid.createBoid();
       this.#boids[i] = boid;
       this.scene.add(boidMesh);
-    } 
+    }
   }
 
 
@@ -140,7 +138,7 @@ class App {
   }
 
   #createCamera() {
-    this.camera = new PerspectiveCamera(75, this.screen.x / this.screen.y, 0.1, 400)
+    this.camera = new PerspectiveCamera(75, this.screen.x / this.screen.y, 0.1, 10000)
     this.camera.position.set(0, 0, 400)
   }
 
