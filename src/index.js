@@ -3,18 +3,12 @@ import {
   Scene,
   WebGLRenderer,
   PerspectiveCamera,
-  BoxGeometry,
-  MeshStandardMaterial,
   Mesh,
   PointLight,
   Clock,
   Vector2,
   PlaneGeometry,
   MeshBasicMaterial,
-  ConeGeometry,
-  CircleGeometry,
-  SphereGeometry,
-  Vector3
 } from 'three'
 
 
@@ -22,11 +16,16 @@ import { Boid } from './objects/boid.js'
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
-import { SampleShaderMaterial } from './materials/SampleShaderMaterial'
-import { gltfLoader } from './loaders'
+import { VertexNormalsHelper } from 'three/addons/helpers/VertexNormalsHelper.js';
+import { OrthographicCamera } from 'three';
+import { TorusGeometry } from 'three';
 
 class App {
-  #resizeCallback = () => this.#onResize()
+
+  #boidsQty = 10;
+  #boids = [];
+  #obstacles = [];
+  #planesGroup = new Mesh();
 
   constructor(container, opts = { physics: false, debug: false }) {
     this.container = document.querySelector(container)
@@ -57,11 +56,14 @@ class App {
       Object.assign(this, { PhysicsBox, PhysicsFloor })
     }
 
-    this.#createLight()
-    this.#createClock()
-    this.#addListeners()
-    this.#createControls()
-    this.#createBoids()
+    this.#createLight();
+    this.#createClock();
+    this.#addListeners();
+    this.#createControls();
+    this.#createBoids();
+    this.#createBoidsBox();
+    this.#createObstacles();
+
 
 
     if (this.hasDebug) {
@@ -98,23 +100,21 @@ class App {
     }
 
     this.#updateSimulation(elapsed)
-
     this.simulation?.update()
   }
 
   #updateSimulation(elapsed) {
-
     for (const boid of this.#boids) {
-      // console.log(boid.position)
-      boid.update(this.#boids, elapsed)
-
+      boid.update(this.#boids, this.#obstacles);
     }
-    console.log("UPDATED ALL BOIDS")
+
+    this.#planesGroup.rotation.z = elapsed * 0.06;
+    this.#planesGroup.rotation.x = elapsed * 0.06;
+
 
   }
 
-  #boidsQty = 10;
-  #boids = [];
+
 
   #createBoids() {
 
@@ -129,6 +129,76 @@ class App {
 
 
 
+  #createBoidsBox() {
+
+    const size = 500;
+    const halfSize = size / 2;
+    const frameMaterial = new MeshBasicMaterial({
+      color: 0x00ffff,
+      opacity: 0.05,
+      // side: DoubleSide, 
+      wireframe: true
+    });
+
+    // Function to create a single plane rotated appropriately to form the box
+    const createPlane = (width, height, rotation, position, name) => {
+      const geometry = new PlaneGeometry(width, height);
+      const plane = new Mesh(geometry, frameMaterial);
+      plane.name = name;
+      plane.rotation.x = rotation.x;
+      plane.rotation.y = rotation.y;
+      plane.rotation.z = rotation.z;
+      plane.position.set(position.x, position.y, position.z);
+
+      return plane;
+    };
+
+    // Create six planes to form an enclosed box
+    const planes = [];
+    planes.push(createPlane(size, size, { x: -Math.PI / 2, y: 0, z: 0 }, { x: 0, y: -halfSize, z: 0 }, "bottomWall"));
+    planes.push(createPlane(size, size, { x: Math.PI / 2, y: 0, z: 0 }, { x: 0, y: halfSize, z: 0 }, "topWall"));
+
+    planes.push(createPlane(size, size, { x: 0, y: Math.PI / 2, z: 0 }, { x: -halfSize, y: 0, z: 0 }, "leftWall"));
+    planes.push(createPlane(size, size, { x: 0, y: -Math.PI / 2, z: 0 }, { x: halfSize, y: 0, z: 0, }, "rightWall"));
+
+    planes.push(createPlane(size, size, { x: 0, y: Math.PI, z: 0 }, { x: 0, y: 0, z: halfSize }, "frontWall"));
+    planes.push(createPlane(size, size, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: -halfSize }, "backWall"));
+
+
+    this.scene.add(this.#planesGroup)
+
+
+    // Add planes to the scene
+    planes.forEach((plane, i) => {
+      this.#obstacles.push(plane);
+      const helper = new VertexNormalsHelper(plane, 100, 0xff0000);
+      this.#planesGroup.add(plane);
+      this.scene.add(helper);
+    });
+  }
+
+  #createObstacles() {
+
+    const frameMaterial = new MeshBasicMaterial({
+      color: 0x00ffff,
+      opacity: 0.05,
+      // side: DoubleSide, 
+      wireframe: true
+    });
+
+    const tMesh = new Mesh(
+      new TorusGeometry(80, 10, 22, 22),
+      new MeshBasicMaterial({
+        color: 0x02aacd,
+        opacity: 0.05,
+      })
+    );
+    this.scene.add(tMesh);
+    this.#obstacles.push(tMesh);
+  }
+
+  #resizeCallback = () => this.#onResize()
+
   #render() {
     this.renderer.render(this.scene, this.camera)
   }
@@ -139,7 +209,8 @@ class App {
 
   #createCamera() {
     this.camera = new PerspectiveCamera(75, this.screen.x / this.screen.y, 0.1, 10000)
-    this.camera.position.set(0, 0, 400)
+    // this.camera = new OrthographicCamera(-500, 500, 500, -500);
+    this.camera.position.set(0, 0, 800)
   }
 
   #createRenderer() {

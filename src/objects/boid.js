@@ -15,12 +15,14 @@ import {
 import { getRandomInRange } from '../utils';
 import { Spherical } from 'three';
 import { generateUUID } from 'three/src/math/MathUtils.js';
+import { Raycaster } from 'three';
 
 export class Boid {
     constructor() {
         this.neighborhoodRadius = 150;
         this.neighborhoodAngle = 20;
         this.crowdingRadius = 30;
+        this.collisionRadius = 60;
 
         this.boidMesh;
 
@@ -28,12 +30,13 @@ export class Boid {
         this.startAngle = this.neighborhoodAngle + this.updateAngle; // Start angle in radians
         this.endAngle = -this.neighborhoodAngle + this.updateAngle; // End angle in radians
 
-        this.boidSpeed = 0.2;
-        this.initialVelocity = 1;
+        this.boidSpeed = 2;
         this.rotationSpeed = 0.02;
 
         this.weightOld = 0.5;
         this.weightAvg = 0.5;
+
+        this.raycaster = new Raycaster();
 
         this.id = generateUUID();
     }
@@ -54,12 +57,89 @@ export class Boid {
         boid.add(crowdingArea);
         boid.add(debugLine); // shows where angle 0 is
 
-        boid.position.set(getRandomInRange(-200, 200), getRandomInRange(-200, 200), 0)
-        boid.rotation.set(0, 0, getRandomInRange(-Math.PI, Math.PI))
+        boid.position.set(getRandomInRange(-200, 200), getRandomInRange(-200, 200), getRandomInRange(-200, 200))
+        boid.rotation.set(getRandomInRange(-Math.PI, Math.PI), getRandomInRange(-Math.PI, Math.PI), getRandomInRange(-Math.PI, Math.PI))
 
         this.boidMesh = boid;
         return boid;
     }
+
+    update(boidsList, obstacles) {
+
+        // Move the boid forward in the direction of the heading
+        const currentHeading = this.getHeadingVector(this.boidMesh);
+
+        const avgHeading = this.getAverageHeading(boidsList);
+        const WaHa = avgHeading.clone().multiplyScalar(this.weightAvg);
+        const WoHc = currentHeading.clone().multiplyScalar(this.weightOld);
+        const WoWa = this.weightOld + this.weightAvg;
+
+        const numerator = new Vector3().addVectors(WoHc, WaHa);
+        const newHeading = numerator.clone().divideScalar(WoWa).normalize();
+
+        const {
+            normal,
+            collider,
+            distance
+        } = this.avoidCollision(obstacles);
+        // newHeading.add(steerAway);
+
+        if (collider && distance < this.collisionRadius) {
+            console.log(`avoidCollision with ${collider.object.name}`);
+            console.log(normal)
+            newHeading.add(normal.multiplyScalar(1));
+        }
+
+        // Calculate current and target quaternions
+        const currentQuaternion = this.boidMesh.quaternion.clone();
+        const targetQuaternion = new Quaternion();
+        targetQuaternion.setFromUnitVectors(new Vector3(0, 1, 0), newHeading);
+
+        // Spherical Linear Interpolation (slerp)
+        this.boidMesh.quaternion.slerpQuaternions(currentQuaternion, targetQuaternion, collider ? 1 : this.rotationSpeed);
+
+        // Move the boid in the direction of the new heading
+        this.boidMesh.position.add(newHeading.multiplyScalar(this.boidSpeed));
+    }
+
+    avoidCollision(obstacles) {
+        const steer = new Vector3();
+
+        obstacles.map((obstacle) => {
+            obstacle.material.color.setHex(0x00ffff);
+        });
+
+        this.raycaster.set(this.boidMesh.position, this.getHeadingVector(this.boidMesh));
+        const intersects = this.raycaster.intersectObjects(obstacles);
+
+        if (intersects.length > 0) {
+            // The ray intersects an object, and intersects[0] is the closest one
+            const closestIntersection = intersects[0];
+            const distanceToCollision = closestIntersection.distance;
+
+            console.log(intersects[0].object.name);
+
+            // To get the world normal:
+            // Transform the normal to world coordinates
+            const normal = closestIntersection.face.normal;
+            const worldNormal = normal.clone().transformDirection(closestIntersection.object.matrixWorld).normalize();
+
+            return {
+                normal: worldNormal,
+                collider: intersects[0],
+                distance: distanceToCollision
+            };
+
+        } else {
+            console.log("No obstacles were hit by the ray.");
+            return {
+                normal: steer,
+                collider: null,
+                distance: 0
+            };
+        }
+    }
+
 
     createAngleLine() {
         const points = [];
@@ -136,32 +216,7 @@ export class Boid {
         return boidInAngle;
     }
 
-    update(boidsList, elapsedTime) {
 
-        // Move the boid forward in the direction of the heading
-        const currentHeading = this.getHeadingVector(this.boidMesh);
-
-        const avgHeading = this.getAverageHeading(boidsList);
-        const WaHa = avgHeading.clone().multiplyScalar(this.weightAvg);
-        const WoHc = currentHeading.clone().multiplyScalar(this.weightOld);
-        const WoWa = this.weightOld + this.weightAvg;
-
-        const numerator = new Vector3().addVectors(WoHc, WaHa);
-        const newHeading = numerator.clone().divideScalar(WoWa).normalize();  // Ensure it's a unit vector
-
-        // Calculate current and target quaternions
-        const currentQuaternion = this.boidMesh.quaternion.clone();
-        const targetQuaternion = new Quaternion();
-        targetQuaternion.setFromUnitVectors(new Vector3(0, 1, 0), newHeading);
-
-        // Spherical Linear Interpolation (slerp)
-        this.boidMesh.quaternion.slerpQuaternions(currentQuaternion, targetQuaternion, this.rotationSpeed * elapsedTime);
-
-        // Move the boid in the direction of the new heading
-        this.boidMesh.position.add(newHeading.multiplyScalar(this.boidSpeed * elapsedTime));
-
-
-    }
 
     getAverageHeading(boids) {
         let headingSum = new Vector3(0, 0, 0);
@@ -198,7 +253,5 @@ export class Boid {
 
         return forward.normalize();
     }
-
-
 
 }
