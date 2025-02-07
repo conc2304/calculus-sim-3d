@@ -22,7 +22,7 @@ import { TorusGeometry } from 'three';
 
 class App {
 
-  #boidsQty = 10;
+  #boidsQty = 200;
   #boids = [];
   #obstacles = [];
   #planesGroup = new Mesh();
@@ -110,8 +110,6 @@ class App {
 
     this.#planesGroup.rotation.z = elapsed * 0.06;
     this.#planesGroup.rotation.x = elapsed * 0.06;
-
-
   }
 
 
@@ -135,14 +133,15 @@ class App {
     const halfSize = size / 2;
     const frameMaterial = new MeshBasicMaterial({
       color: 0x00ffff,
-      opacity: 0.05,
+      opacity: 0.1,
       // side: DoubleSide, 
-      wireframe: true
+      wireframe: true,
+      transparent: true
     });
 
     // Function to create a single plane rotated appropriately to form the box
     const createPlane = (width, height, rotation, position, name) => {
-      const geometry = new PlaneGeometry(width, height);
+      const geometry = new PlaneGeometry(width, height, 10, 10);
       const plane = new Mesh(geometry, frameMaterial);
       plane.name = name;
       plane.rotation.x = rotation.x;
@@ -170,31 +169,32 @@ class App {
 
     // Add planes to the scene
     planes.forEach((plane, i) => {
+      plane.repulsion = 5;
       this.#obstacles.push(plane);
-      const helper = new VertexNormalsHelper(plane, 100, 0xff0000);
+      // const helper = new VertexNormalsHelper(plane, 100, 0xff0000);
       this.#planesGroup.add(plane);
-      this.scene.add(helper);
+      // this.scene.add(helper);
     });
   }
 
   #createObstacles() {
 
-    const frameMaterial = new MeshBasicMaterial({
-      color: 0x00ffff,
-      opacity: 0.05,
-      // side: DoubleSide, 
-      wireframe: true
-    });
+    // const frameMaterial = new MeshBasicMaterial({
+    //   color: 0x00ffff,
+    //   opacity: 0.05,
+    //   // side: DoubleSide, 
+    //   wireframe: true
+    // });
 
-    const tMesh = new Mesh(
-      new TorusGeometry(80, 10, 22, 22),
-      new MeshBasicMaterial({
-        color: 0x02aacd,
-        opacity: 0.05,
-      })
-    );
-    this.scene.add(tMesh);
-    this.#obstacles.push(tMesh);
+    // const tMesh = new Mesh(
+    //   new TorusGeometry(80, 10, 22, 22),
+    //   new MeshBasicMaterial({
+    //     color: 0x02aacd,
+    //     opacity: 0.05,
+    //   })
+    // );
+    // this.scene.add(tMesh);
+    // this.#obstacles.push(tMesh);
   }
 
   #resizeCallback = () => this.#onResize()

@@ -31,7 +31,7 @@ export class Boid {
         this.endAngle = -this.neighborhoodAngle + this.updateAngle; // End angle in radians
 
         this.boidSpeed = 2;
-        this.rotationSpeed = 0.02;
+        this.rotationSpeed = 0.1;
 
         this.weightOld = 0.5;
         this.weightAvg = 0.5;
@@ -48,14 +48,8 @@ export class Boid {
         const material = new MeshBasicMaterial({ color: 0xffff00 });
         const boid = new Mesh(geometry, material);
 
-        const neighborhood = this.createBoidSector(this.neighborhoodRadius, this.startAngle, this.endAngle, { color: 0x00ff00, opacity: 0.1 });
-        const crowdingArea = this.createBoidSector(this.crowdingRadius, this.startAngle, this.endAngle, { color: 0xff0000, opacity: 0.45 });
 
-        const debugLine = this.createAngleLine();
-
-        boid.add(neighborhood);
-        boid.add(crowdingArea);
-        boid.add(debugLine); // shows where angle 0 is
+        // this.addDebugging()
 
         boid.position.set(getRandomInRange(-200, 200), getRandomInRange(-200, 200), getRandomInRange(-200, 200))
         boid.rotation.set(getRandomInRange(-Math.PI, Math.PI), getRandomInRange(-Math.PI, Math.PI), getRandomInRange(-Math.PI, Math.PI))
@@ -64,47 +58,139 @@ export class Boid {
         return boid;
     }
 
+    addDebugging() {
+        const neighborhood = this.createBoidSector(this.neighborhoodRadius, this.startAngle, this.endAngle, { color: 0x00ff00, opacity: 0.1 });
+        const crowdingArea = this.createBoidSector(this.crowdingRadius, this.startAngle, this.endAngle, { color: 0xff0000, opacity: 0.45 });
+        const debugLine = this.createAngleLine();
+
+        boid.add(neighborhood);
+        boid.add(crowdingArea);
+        boid.add(debugLine); // shows where angle 0 is
+    }
+
     update(boidsList, obstacles) {
 
         // Move the boid forward in the direction of the heading
-        const currentHeading = this.getHeadingVector(this.boidMesh);
+        const headingCurrent = this.getHeadingVector(this.boidMesh);
 
-        const avgHeading = this.getAverageHeading(boidsList);
-        const WaHa = avgHeading.clone().multiplyScalar(this.weightAvg);
-        const WoHc = currentHeading.clone().multiplyScalar(this.weightOld);
+        // Calculate the avg heading based on general flock direction
+        const headingFlockAvg = this.getAverageHeading(boidsList);
+        const WaHa = headingFlockAvg.clone().multiplyScalar(this.weightAvg);
+        const WoHc = headingCurrent.clone().multiplyScalar(this.weightOld);
         const WoWa = this.weightOld + this.weightAvg;
 
         const numerator = new Vector3().addVectors(WoHc, WaHa);
-        const newHeading = numerator.clone().divideScalar(WoWa).normalize();
+        let heading = numerator.clone().divideScalar(WoWa).normalize();
 
-        const {
-            normal,
-            collider,
-            distance
-        } = this.avoidCollision(obstacles);
-        // newHeading.add(steerAway);
+        // Avoid obstacles via repulsion
+        heading = this.getAvoidanceHeading(obstacles, heading);
 
-        if (collider && distance < this.collisionRadius) {
-            console.log(`avoidCollision with ${collider.object.name}`);
-            console.log(normal)
-            newHeading.add(normal.multiplyScalar(1));
-        }
+        // Add Flocking Separation to boid
+        heading = this.getSeparationHeading(boidsList, heading);
+
 
         // Calculate current and target quaternions
         const currentQuaternion = this.boidMesh.quaternion.clone();
         const targetQuaternion = new Quaternion();
-        targetQuaternion.setFromUnitVectors(new Vector3(0, 1, 0), newHeading);
+        targetQuaternion.setFromUnitVectors(new Vector3(0, 1, 0), heading);
 
         // Spherical Linear Interpolation (slerp)
-        this.boidMesh.quaternion.slerpQuaternions(currentQuaternion, targetQuaternion, collider ? 1 : this.rotationSpeed);
+        this.boidMesh.quaternion.slerpQuaternions(
+            currentQuaternion,
+            targetQuaternion,
+            this.rotationSpeed
+        );
 
         // Move the boid in the direction of the new heading
-        this.boidMesh.position.add(newHeading.multiplyScalar(this.boidSpeed));
+        this.boidMesh.position.add(heading.multiplyScalar(this.boidSpeed));
+    }
+
+    getSeparationHeading(boidsList, heading) {
+
+        let position = this.boidMesh.position;
+        const separationHeading = new Vector3().add(heading);
+
+        const repulsionPower = 4;
+        const forceVector = new Vector3(0, 0, 0);
+
+        boidsList.forEach((otherBoid, i) => {
+            // Don't add self to average
+            if (otherBoid.id === this.id) return;
+
+            // Only separate boids in sector
+            const boidInCrowdingArea = this.isBoidInSector(otherBoid.boidMesh, this.crowdingRadius, this.startAngle)
+            if (!boidInCrowdingArea) return;
+
+            let positionOther = otherBoid.boidMesh.position;
+            const distanceVector = new Vector3().subVectors(position, positionOther);
+            const distance = distanceVector.length();
+
+            if (distance > 0) {
+                const repulsionStrength = 1 / Math.pow(distance / this.crowdingRadius, repulsionPower)
+                distanceVector.normalize().multiplyScalar(repulsionStrength);
+                forceVector.add(distanceVector);
+            }
+        });
+
+        let tempSH = separationHeading.clone().add(forceVector);
+        // console.log('before', { tempSH })
+
+        let tempAfter = tempSH.clone().normalize();
+
+        // console.log('after', { tempAfter })
+
+        return tempAfter;
+    }
+
+    getDistanceToObstacle(obstacle) {
+        const boidPos = this.boidMesh.position.clone();
+
+        // Ensure the obstacle has geometry and vertices
+        if (!obstacle.geometry || !obstacle.geometry.attributes.position) {
+            console.error('Obstacle must have geometry with vertices');
+            return {
+                distance: Infinity,
+                closestPoint: null,
+            };
+        }
+
+        // Get the vertices of the obstacle in world space
+        const positionAttribute = obstacle.geometry.attributes.position;
+        const matrixWorld = obstacle.matrixWorld;
+        let closestPoint = null;
+        let minDistance = Infinity;
+
+        for (let i = 0; i < positionAttribute.count; i++) {
+            // Get vertex in local space
+            const vertex = new Vector3(
+                positionAttribute.getX(i),
+                positionAttribute.getY(i),
+                positionAttribute.getZ(i)
+            );
+
+            // Transform vertex to world space
+            vertex.applyMatrix4(matrixWorld);
+
+            // Calculate distance to the boid
+            const distance = boidPos.distanceTo(vertex);
+
+            // Update closest point if this vertex is nearer
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestPoint = vertex.clone();
+            }
+        }
+
+        // Return the closest distance and point
+        return {
+            distance: minDistance,
+            closestPoint: closestPoint,
+        };
     }
 
     avoidCollision(obstacles) {
         const steer = new Vector3();
-
+        new Vector3()
         obstacles.map((obstacle) => {
             obstacle.material.color.setHex(0x00ffff);
         });
@@ -122,11 +208,14 @@ export class Boid {
             // To get the world normal:
             // Transform the normal to world coordinates
             const normal = closestIntersection.face.normal;
-            const worldNormal = normal.clone().transformDirection(closestIntersection.object.matrixWorld).normalize();
+            const worldNormal = normal
+                .clone()
+                .transformDirection(closestIntersection.object.matrixWorld)
+                .normalize();
 
             return {
                 normal: worldNormal,
-                collider: intersects[0],
+                obstacle: intersects[0],
                 distance: distanceToCollision
             };
 
@@ -134,12 +223,11 @@ export class Boid {
             console.log("No obstacles were hit by the ray.");
             return {
                 normal: steer,
-                collider: null,
+                obstacle: null,
                 distance: 0
             };
         }
     }
-
 
     createAngleLine() {
         const points = [];
@@ -152,7 +240,6 @@ export class Boid {
 
         return line;
     }
-
 
     createBoidSector(radius, startAngle, endAngle, materialConf) {
 
@@ -189,7 +276,6 @@ export class Boid {
 
     isBoidInSector(boidOther, radius, startAngle) {
 
-
         // Check if inside radius
         const distanceToBoid = boidOther.position.distanceTo(this.boidMesh.position)
         const boidInRadius = distanceToBoid < radius;
@@ -212,11 +298,41 @@ export class Boid {
         relativePos.applyAxisAngle(axis, angle);
 
         const boidInAngle = Math.abs(theta) < Math.abs(startAngle)
-
+        // console.log({ boidInAngle }) 
         return boidInAngle;
     }
 
+    getAvoidanceHeading(obstacles, currentHeading) {
+        // avoid obstacles via repulsion
+        let newHeading = currentHeading;
 
+        obstacles.forEach(obstacle => {
+            const { distance, closestPoint } = this.getDistanceToObstacle(obstacle);
+
+            if (distance < this.collisionRadius) {
+                // raycast at closest point to get the normal of the face that it hits
+                const rayDirection = new Vector3().subVectors(closestPoint, this.boidMesh.position).normalize();
+                this.raycaster.set(this.boidMesh.position, rayDirection);
+                const intersects = this.raycaster.intersectObjects(obstacles);
+
+                let worldNormal = new Vector3();
+                if (intersects.length > 0) {
+
+                    const closestIntersection = intersects[0];
+                    const normal = closestIntersection.face.normal;
+                    worldNormal = normal
+                        .clone()
+                        .transformDirection(closestIntersection.object.matrixWorld)
+                        .normalize();
+                }
+                const repulsionScale = 1 - (distance / this.collisionRadius);
+                const repulsionVector = new Vector3().add(worldNormal).multiplyScalar((obstacle.repulsion || 5) * repulsionScale);
+                newHeading = newHeading.add(repulsionVector);
+            }
+        });
+
+        return newHeading;
+    }
 
     getAverageHeading(boids) {
         let headingSum = new Vector3(0, 0, 0);
@@ -224,7 +340,7 @@ export class Boid {
         boids.forEach((boid) => {
             // Don't add self to average
             if (boid.id === this.id) return;
-            // Only average boids in 
+            // Only average boids in sector
             if (!this.isBoidInSector(boid.boidMesh, this.neighborhoodRadius, this.startAngle)) return;
 
             // console.log(`${boid.id} is in sector of ${this.id}`);
