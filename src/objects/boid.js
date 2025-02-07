@@ -9,29 +9,32 @@ import {
     LineBasicMaterial,
     Line,
     BufferGeometry,
-    Quaternion
+    Quaternion,
+    Euler
 } from 'three'
 
 import { getRandomInRange } from '../utils';
 import { Spherical } from 'three';
 import { generateUUID } from 'three/src/math/MathUtils.js';
 import { Raycaster } from 'three';
+import { SimplexNoise } from 'three/examples/jsm/Addons.js';
 
 export class Boid {
     constructor() {
-        this.neighborhoodRadius = 150;
-        this.neighborhoodAngle = 20;
-        this.crowdingRadius = 30;
-        this.collisionRadius = 60;
-
         this.boidMesh;
+
+        this.neighborhoodRadius = 150 + getRandomInRange(-20, 20);
+        this.neighborhoodAngle = 20 + getRandomInRange(-20, 20);
+        this.crowdingRadius = 30 + getRandomInRange(-20, 20);
+        this.collisionRadius = 60 + getRandomInRange(-20, 20);;
+        this.maxRange = 200;
 
         this.updateAngle = -Math.PI / 2; // account for initial position of 0
         this.startAngle = this.neighborhoodAngle + this.updateAngle; // Start angle in radians
         this.endAngle = -this.neighborhoodAngle + this.updateAngle; // End angle in radians
 
-        this.boidSpeed = 2;
-        this.rotationSpeed = 0.1;
+        this.boidSpeed = 2 + getRandomInRange(-1, 1);
+        this.rotationSpeed = 0.05;
 
         this.weightOld = 0.5;
         this.weightAvg = 0.5;
@@ -39,22 +42,26 @@ export class Boid {
         this.raycaster = new Raycaster();
 
         this.id = generateUUID();
+        this.noiseSeed = Math.round(Math.random() * Math.pow(10, 10));
+        this.simplex = new SimplexNoise();
     }
 
-    createBoid() {
+    createBoid(maxRange = 200) {
         const boidHeight = 10;
         const boidWidth = 2.5;
         const geometry = new ConeGeometry(boidWidth, boidHeight, 32);
         const material = new MeshBasicMaterial({ color: 0xffff00 });
         const boid = new Mesh(geometry, material);
+        this.maxRange = maxRange;
 
+        boid.position.set(0, 0, 0)
+        // boid.position.set(getRandomInRange(-maxRange, maxRange), getRandomInRange(-maxRange, maxRange), getRandomInRange(-maxRange, maxRange));
+        boid.rotation.set(getRandomInRange(-Math.PI, Math.PI), getRandomInRange(-Math.PI, Math.PI), getRandomInRange(-Math.PI, Math.PI));
+
+        this.boidMesh = boid;
 
         // this.addDebugging()
 
-        boid.position.set(getRandomInRange(-200, 200), getRandomInRange(-200, 200), getRandomInRange(-200, 200))
-        boid.rotation.set(getRandomInRange(-Math.PI, Math.PI), getRandomInRange(-Math.PI, Math.PI), getRandomInRange(-Math.PI, Math.PI))
-
-        this.boidMesh = boid;
         return boid;
     }
 
@@ -68,19 +75,19 @@ export class Boid {
         boid.add(debugLine); // shows where angle 0 is
     }
 
-    update(boidsList, obstacles) {
-
-        // Move the boid forward in the direction of the heading
-        const headingCurrent = this.getHeadingVector(this.boidMesh);
-
-        // Calculate the avg heading based on general flock direction
-        const headingFlockAvg = this.getAverageHeading(boidsList);
-        const WaHa = headingFlockAvg.clone().multiplyScalar(this.weightAvg);
-        const WoHc = headingCurrent.clone().multiplyScalar(this.weightOld);
-        const WoWa = this.weightOld + this.weightAvg;
-
-        const numerator = new Vector3().addVectors(WoHc, WaHa);
-        let heading = numerator.clone().divideScalar(WoWa).normalize();
+    /**
+     * Updates the state of each boid in the simulation based on nearby boids and obstacles.
+     * This function is typically called within the animation loop and handles behavior such as
+     * separation, alignment, cohesion, and obstacle avoidance.
+     *
+     * @param {Boid[]} boidsList - An array of Boid objects representing all boids in the simulation.
+     * @param {Mesh[]} obstacles - An array of Mesh objects representing obstacles that boids must avoid.
+     * @param {number} elapsedTime - The elapsed time in seconds since the last update, used for time-dependent calculations.
+     * @returns {void} This function does not return a value but modifies the boids' states directly.
+     */
+    update(boidsList, obstacles, elapsedTime) {
+        // Make boids go in the same direction
+        let heading = this.getAlignmentHeading(boidsList);
 
         // Avoid obstacles via repulsion
         heading = this.getAvoidanceHeading(obstacles, heading);
@@ -88,11 +95,26 @@ export class Boid {
         // Add Flocking Separation to boid
         heading = this.getSeparationHeading(boidsList, heading);
 
-
         // Calculate current and target quaternions
         const currentQuaternion = this.boidMesh.quaternion.clone();
         const targetQuaternion = new Quaternion();
         targetQuaternion.setFromUnitVectors(new Vector3(0, 1, 0), heading);
+
+
+        const noiseScale = 0.001; // Scale down the time for smoother changes
+        // const noiseStrength = Math.PI / 8; // Control the range of rotation change
+        const noiseStrength = 1; // Control the range of rotation change
+
+        const noiseX = this.simplex.noise(this.noiseSeed, elapsedTime * noiseScale) * noiseStrength;
+        const noiseY = this.simplex.noise(this.noiseSeed + 1000, elapsedTime * noiseScale) * noiseStrength; // Offset Y noise
+
+
+        // Create a quaternion from noise-induced rotations
+        const noiseQuaternion = new Quaternion();
+        const noiseEuler = new Euler(noiseX, noiseY, 0, 'XYZ');
+        noiseQuaternion.setFromEuler(noiseEuler);
+        targetQuaternion.multiply(noiseQuaternion);
+
 
         // Spherical Linear Interpolation (slerp)
         this.boidMesh.quaternion.slerpQuaternions(
@@ -103,6 +125,31 @@ export class Boid {
 
         // Move the boid in the direction of the new heading
         this.boidMesh.position.add(heading.multiplyScalar(this.boidSpeed));
+
+        // if they escape put them back in
+        if (this.boidMesh.position.distanceTo(new Vector3()) > this.maxRange * 1.75) {
+            this.boidMesh.position.set(0, 0, 0);
+        }
+    }
+
+    /**
+     * @param {Boid[]} boidsList - An array of Boid objects representing all boids in the simulation.
+     * @returns {Vector3} 
+    */
+    getAlignmentHeading(boidsList) {
+        // Move the boid forward in the direction of the heading
+        const headingCurrent = this.getHeadingVector(this.boidMesh);
+
+        // Calculate the avg heading based on general flock direction
+        const headingFlockAvg = this.getAverageHeading(boidsList);
+        const WaHa = headingFlockAvg.clone().multiplyScalar(this.weightAvg);
+        const WoHc = headingCurrent.clone().multiplyScalar(this.weightOld);
+        const WoWa = this.weightOld + this.weightAvg;
+
+        const numerator = new Vector3().addVectors(WoHc, WaHa);
+        const heading = numerator.clone().divideScalar(WoWa).normalize();
+
+        return heading;
     }
 
     getSeparationHeading(boidsList, heading) {
@@ -133,11 +180,7 @@ export class Boid {
         });
 
         let tempSH = separationHeading.clone().add(forceVector);
-        // console.log('before', { tempSH })
-
         let tempAfter = tempSH.clone().normalize();
-
-        // console.log('after', { tempAfter })
 
         return tempAfter;
     }

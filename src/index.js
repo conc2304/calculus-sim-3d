@@ -22,7 +22,7 @@ import { TorusGeometry } from 'three';
 
 class App {
 
-  #boidsQty = 200;
+  #boidsQty = 50;
   #boids = [];
   #obstacles = [];
   #planesGroup = new Mesh();
@@ -60,10 +60,11 @@ class App {
     this.#createClock();
     this.#addListeners();
     this.#createControls();
-    this.#createBoids();
-    this.#createBoidsBox();
-    this.#createObstacles();
 
+    const boundingBoxSize = 500;
+    this.#createBoids(boundingBoxSize / 2);
+    this.#createBoidsBox(boundingBoxSize);
+    this.#createObstacles();
 
 
     if (this.hasDebug) {
@@ -94,42 +95,36 @@ class App {
   #update() {
     const elapsed = this.clock.getElapsedTime()
 
-    if (this.shadedBox) {
-      this.shadedBox.rotation.y = elapsed
-      this.shadedBox.rotation.z = elapsed * 0.6
-    }
+    this.#updateSimulation(elapsed);
 
-    this.#updateSimulation(elapsed)
     this.simulation?.update()
   }
 
-  #updateSimulation(elapsed) {
+  #updateSimulation(elapsedTime) {
     for (const boid of this.#boids) {
-      boid.update(this.#boids, this.#obstacles);
+      boid.update(this.#boids, this.#obstacles, elapsedTime);
     }
 
-    this.#planesGroup.rotation.z = elapsed * 0.06;
-    this.#planesGroup.rotation.x = elapsed * 0.06;
+    this.#planesGroup.rotation.z = elapsedTime * 0.06;
+    this.#planesGroup.rotation.x = elapsedTime * 0.06;
   }
 
 
 
-  #createBoids() {
+  #createBoids(maxRange = 200) {
 
     for (let i = 0; i < this.#boidsQty; i++) {
       const boid = new Boid();
+      const boidMesh = boid.createBoid(maxRange);
 
-      const boidMesh = boid.createBoid();
       this.#boids[i] = boid;
       this.scene.add(boidMesh);
     }
   }
 
 
+  #createBoidsBox(size) {
 
-  #createBoidsBox() {
-
-    const size = 500;
     const halfSize = size / 2;
     const frameMaterial = new MeshBasicMaterial({
       color: 0x00ffff,
@@ -166,7 +161,6 @@ class App {
 
     this.scene.add(this.#planesGroup)
 
-
     // Add planes to the scene
     planes.forEach((plane, i) => {
       plane.repulsion = 5;
@@ -179,22 +173,23 @@ class App {
 
   #createObstacles() {
 
-    // const frameMaterial = new MeshBasicMaterial({
-    //   color: 0x00ffff,
-    //   opacity: 0.05,
-    //   // side: DoubleSide, 
-    //   wireframe: true
-    // });
+    const frameMaterial = new MeshBasicMaterial({
+      color: 0x00ffff,
+      opacity: 0.05,
+      // side: DoubleSide, 
+      wireframe: true
+    });
 
-    // const tMesh = new Mesh(
-    //   new TorusGeometry(80, 10, 22, 22),
-    //   new MeshBasicMaterial({
-    //     color: 0x02aacd,
-    //     opacity: 0.05,
-    //   })
-    // );
-    // this.scene.add(tMesh);
-    // this.#obstacles.push(tMesh);
+    const tMesh = new Mesh(
+      new TorusGeometry(80, 10, 22, 22),
+      new MeshBasicMaterial({
+        color: 0x02aacd,
+        opacity: 0.05,
+      })
+    );
+    tMesh.name = "basicObstacle";
+    this.scene.add(tMesh);
+    this.#obstacles.push(tMesh);
   }
 
   #resizeCallback = () => this.#onResize()

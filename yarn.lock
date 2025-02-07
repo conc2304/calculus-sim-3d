@@ -123,6 +123,11 @@ rollup@^1.20.0||^2.0.0||^3.0.0, rollup@^3.7.0:
   optionalDependencies:
     fsevents "~2.3.2"
 
+simplex-noise@^4.0.3:
+  version "4.0.3"
+  resolved "https://registry.npmjs.org/simplex-noise/-/simplex-noise-4.0.3.tgz"
+  integrity sha512-qSE2I4AngLQG7BXqoZj51jokT4WUXe8mOBrvfOXpci8+6Yu44+/dD5zqDpOx3Ux792eamTd2lLcI8jqFntk/lg==
+
 source-map-js@^1.0.2:
   version "1.0.2"
   resolved "https://registry.npmjs.org/source-map-js/-/source-map-js-1.0.2.tgz"
@@ -138,10 +143,10 @@ supports-preserve-symlinks-flag@^1.0.0:
   resolved "https://registry.npmjs.org/supports-preserve-symlinks-flag/-/supports-preserve-symlinks-flag-1.0.0.tgz"
   integrity sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==
 
-three@^0.148.0, three@0.x:
-  version "0.148.0"
-  resolved "https://registry.npmjs.org/three/-/three-0.148.0.tgz"
-  integrity sha512-8uzVV+qhTPi0bOFs/3te3RW6hb3urL8jYEl6irjCWo/l6sr8MPNMcClFev/MMYeIxr0gmDcoXTy/8LXh/LXkfw==
+three@^0.173.0, three@0.x:
+  version "0.173.0"
+  resolved "https://registry.npmjs.org/three/-/three-0.173.0.tgz"
+  integrity sha512-AUwVmViIEUgBwxJJ7stnF0NkPpZxx1aZ6WiAbQ/Qq61h6I9UR4grXtZDmO8mnlaNORhHnIBlXJ1uBxILEKuVyw==
 
 tweakpane@^3.1.2:
   version "3.1.2"
