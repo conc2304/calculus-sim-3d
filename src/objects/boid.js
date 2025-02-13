@@ -23,18 +23,18 @@ export class Boid {
     constructor() {
         this.boidMesh;
 
-        this.neighborhoodRadius = 150 + getRandomInRange(-20, 20);
-        this.neighborhoodAngle = 20 + getRandomInRange(-20, 20);
-        this.crowdingRadius = 30 + getRandomInRange(-20, 20);
-        this.collisionRadius = 60 + getRandomInRange(-20, 20);;
+        this.neighborhoodRadius = 150;  // + getRandomInRange(-20, 20);
+        this.neighborhoodAngle = 20;  // + getRandomInRange(-20, 20);
+        this.crowdingRadius = 30;  // + getRandomInRange(-20, 20);
+        this.collisionRadius = 60;  // + getRandomInRange(-20, 20);;
         this.maxRange = 200;
 
         this.updateAngle = -Math.PI / 2; // account for initial position of 0
         this.startAngle = this.neighborhoodAngle + this.updateAngle; // Start angle in radians
         this.endAngle = -this.neighborhoodAngle + this.updateAngle; // End angle in radians
 
-        this.boidSpeed = 2 + getRandomInRange(-1, 1);
-        this.rotationSpeed = 0.05;
+        this.boidSpeed = 2;  // + getRandomInRange(-1, 1);
+        this.rotationSpeed = 0.35;
 
         this.weightOld = 0.5;
         this.weightAvg = 0.5;
@@ -42,14 +42,14 @@ export class Boid {
         this.raycaster = new Raycaster();
 
         this.id = generateUUID();
-        this.noiseSeed = Math.round(Math.random() * Math.pow(10, 10));
+        this.noiseSeed = Math.round(Math.random() * Math.pow(5, 10));
         this.simplex = new SimplexNoise();
     }
 
     createBoid(maxRange = 200) {
-        const boidHeight = 10;
-        const boidWidth = 2.5;
-        const geometry = new ConeGeometry(boidWidth, boidHeight, 32);
+        const boidHeight = 15;
+        const boidWidth = 5;
+        const geometry = new ConeGeometry(boidWidth, boidHeight, 6);
         const material = new MeshBasicMaterial({ color: 0xffff00 });
         const boid = new Mesh(geometry, material);
         this.maxRange = maxRange;
@@ -85,33 +85,32 @@ export class Boid {
      * @param {number} elapsedTime - The elapsed time in seconds since the last update, used for time-dependent calculations.
      * @returns {void} This function does not return a value but modifies the boids' states directly.
      */
-    update(boidsList, obstacles, elapsedTime) {
+    update(boidsList, walls, obstacles, attractors, elapsedTime) {
         // Make boids go in the same direction
         let heading = this.getAlignmentHeading(boidsList);
 
         // Avoid obstacles via repulsion
-        heading = this.getAvoidanceHeading(obstacles, heading);
+        heading = this.getAvoidanceHeading(walls, obstacles, heading);
 
         // Add Flocking Separation to boid
         heading = this.getSeparationHeading(boidsList, heading);
+
+        heading = this.addAttractorForce(attractors, heading);
 
         // Calculate current and target quaternions
         const currentQuaternion = this.boidMesh.quaternion.clone();
         const targetQuaternion = new Quaternion();
         targetQuaternion.setFromUnitVectors(new Vector3(0, 1, 0), heading);
 
-
-        const noiseScale = 0.001; // Scale down the time for smoother changes
-        // const noiseStrength = Math.PI / 8; // Control the range of rotation change
-        const noiseStrength = 1; // Control the range of rotation change
-
+        const noiseScale = 0.05; // Scale down the time for smoother changes
+        const noiseStrength = 0.01; // Control the range of rotation change
         const noiseX = this.simplex.noise(this.noiseSeed, elapsedTime * noiseScale) * noiseStrength;
-        const noiseY = this.simplex.noise(this.noiseSeed + 1000, elapsedTime * noiseScale) * noiseStrength; // Offset Y noise
+        const noiseY = this.simplex.noise(Math.pow(this.noiseSeed, 2), elapsedTime * noiseScale) * noiseStrength; // Offset Y noise
 
 
         // Create a quaternion from noise-induced rotations
         const noiseQuaternion = new Quaternion();
-        const noiseEuler = new Euler(noiseX, noiseY, 0, 'XYZ');
+        const noiseEuler = new Euler(noiseX, 0, noiseY, 'XYZ');
         noiseQuaternion.setFromEuler(noiseEuler);
         targetQuaternion.multiply(noiseQuaternion);
 
@@ -130,6 +129,8 @@ export class Boid {
         if (this.boidMesh.position.distanceTo(new Vector3()) > this.maxRange * 1.75) {
             this.boidMesh.position.set(0, 0, 0);
         }
+
+        this.updateBoidColor(this.boidMesh, this.maxRange * 1.7);
     }
 
     /**
@@ -150,6 +151,27 @@ export class Boid {
         const heading = numerator.clone().divideScalar(WoWa).normalize();
 
         return heading;
+    }
+
+    addAttractorForce(attractors, heading) {
+
+        let nearestDistance = Infinity;
+        let nearestAttractor = null;
+        // get nearest attractor
+
+        for (const attractor of attractors) {
+            const distance = this.boidMesh.position.distanceTo(attractor.mesh.position);
+            if (distance < nearestDistance) {
+                nearestAttractor = attractor;
+                nearestDistance = distance;
+            }
+        }
+        if (!nearestAttractor) return heading
+
+        const attractionForce = nearestAttractor.calculateAttraction(this.boidMesh);
+        const attractionHeading = heading.add(attractionForce);
+
+        return attractionHeading
     }
 
     getSeparationHeading(boidsList, heading) {
@@ -231,7 +253,7 @@ export class Boid {
         };
     }
 
-    avoidCollision(obstacles) {
+    avoidObstacleCollision(obstacles) {
         const steer = new Vector3();
         new Vector3()
         obstacles.map((obstacle) => {
@@ -246,7 +268,7 @@ export class Boid {
             const closestIntersection = intersects[0];
             const distanceToCollision = closestIntersection.distance;
 
-            console.log(intersects[0].object.name);
+            // console.log(intersects[0].object.name);
 
             // To get the world normal:
             // Transform the normal to world coordinates
@@ -345,18 +367,22 @@ export class Boid {
         return boidInAngle;
     }
 
-    getAvoidanceHeading(obstacles, currentHeading) {
+    getAvoidanceHeading(walls, obstacles, currentHeading) {
         // avoid obstacles via repulsion
         let newHeading = currentHeading;
 
-        obstacles.forEach(obstacle => {
-            const { distance, closestPoint } = this.getDistanceToObstacle(obstacle);
+        let totalRepulsion = new Vector3();
+        let obstaclePushCount = 0;
+
+        walls.forEach(wall => {
+            const { distance, closestPoint } = this.getDistanceToObstacle(wall);
 
             if (distance < this.collisionRadius) {
+                obstaclePushCount++;
                 // raycast at closest point to get the normal of the face that it hits
                 const rayDirection = new Vector3().subVectors(closestPoint, this.boidMesh.position).normalize();
                 this.raycaster.set(this.boidMesh.position, rayDirection);
-                const intersects = this.raycaster.intersectObjects(obstacles);
+                const intersects = this.raycaster.intersectObjects(walls);
 
                 let worldNormal = new Vector3();
                 if (intersects.length > 0) {
@@ -369,10 +395,17 @@ export class Boid {
                         .normalize();
                 }
                 const repulsionScale = 1 - (distance / this.collisionRadius);
-                const repulsionVector = new Vector3().add(worldNormal).multiplyScalar((obstacle.repulsion || 5) * repulsionScale);
-                newHeading = newHeading.add(repulsionVector);
+                const repulsionVector = new Vector3().add(worldNormal).multiplyScalar((wall.repulsion || 5) * repulsionScale);
+                totalRepulsion = totalRepulsion.add(repulsionVector);
             }
         });
+
+        if (obstaclePushCount > 0) {
+            const avgRepulsion = totalRepulsion.divideScalar(obstaclePushCount);
+            newHeading = newHeading.add(avgRepulsion);
+        }
+
+
 
         return newHeading;
     }
@@ -412,5 +445,31 @@ export class Boid {
 
         return forward.normalize();
     }
+
+    updateBoidColor(boidMesh, range, saturation = 1) {
+        const pos = boidMesh.position;
+        const rot = boidMesh.rotation;
+    
+        // Normalize position and rotation values to a 0-1 range for color calculation
+        const normX = (pos.x - range) / range; // Assuming position ranges are known
+        const normY = (pos.y - range) / range;
+        const normZ = (pos.z - range) / range;
+        const normRotX = (rot.x % (2 * Math.PI)) / (2 * Math.PI);
+        const normRotY = (rot.y % (2 * Math.PI)) / (2 * Math.PI);
+        const normRotZ = (rot.z % (2 * Math.PI)) / (2 * Math.PI);
+    
+        // Combine normalized values to create a unique color
+        const r = Math.abs(normX + normRotX) / 2;
+        const g = Math.abs(normY + normRotY) / 2;
+        const b = Math.abs(normZ + normRotZ) / 2;
+    
+        boidMesh.material.color.setRGB(r, g, b);
+
+        const hsl = boidMesh.material.color.getHSL({});
+
+        // Adjust saturation and convert back to RGB
+        boidMesh.material.color.setHSL(hsl.h, saturation, hsl.l);
+    }
+    
 
 }

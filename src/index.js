@@ -9,22 +9,23 @@ import {
   Vector2,
   PlaneGeometry,
   MeshBasicMaterial,
+  Vector3,
 } from 'three'
 
 
 import { Boid } from './objects/boid.js'
-
+import { Attractor } from './objects/attractor.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
-
-import { VertexNormalsHelper } from 'three/addons/helpers/VertexNormalsHelper.js';
-import { OrthographicCamera } from 'three';
 import { TorusGeometry } from 'three';
 
 class App {
 
-  #boidsQty = 50;
+  #boidsQty = 250;
+
   #boids = [];
+  #walls = [];
   #obstacles = [];
+  #attractors = [];
   #planesGroup = new Mesh();
 
   constructor(container, opts = { physics: false, debug: false }) {
@@ -61,10 +62,11 @@ class App {
     this.#addListeners();
     this.#createControls();
 
-    const boundingBoxSize = 500;
+    const boundingBoxSize = 1000;
     this.#createBoids(boundingBoxSize / 2);
-    this.#createBoidsBox(boundingBoxSize);
-    this.#createObstacles();
+    // this.#createBoidsBox(boundingBoxSize);
+    // this.#createObstacles();
+    this.#createAttractors(15, boundingBoxSize);
 
 
     if (this.hasDebug) {
@@ -102,7 +104,11 @@ class App {
 
   #updateSimulation(elapsedTime) {
     for (const boid of this.#boids) {
-      boid.update(this.#boids, this.#obstacles, elapsedTime);
+      boid.update(this.#boids, this.#walls, this.#obstacles, this.#attractors, elapsedTime);
+    }
+
+    for (const attractor of this.#attractors) {
+      attractor.update(elapsedTime);
     }
 
     this.#planesGroup.rotation.z = elapsedTime * 0.06;
@@ -134,7 +140,7 @@ class App {
       transparent: true
     });
 
-    // Function to create a single plane rotated appropriately to form the box
+    // Create a single plane rotated appropriately to form the box with normals pointed inware
     const createPlane = (width, height, rotation, position, name) => {
       const geometry = new PlaneGeometry(width, height, 10, 10);
       const plane = new Mesh(geometry, frameMaterial);
@@ -164,11 +170,21 @@ class App {
     // Add planes to the scene
     planes.forEach((plane, i) => {
       plane.repulsion = 5;
-      this.#obstacles.push(plane);
-      // const helper = new VertexNormalsHelper(plane, 100, 0xff0000);
+      this.#walls.push(plane);
       this.#planesGroup.add(plane);
-      // this.scene.add(helper);
     });
+  }
+
+  #createAttractors(attractorsQty = 0, boundingRange = 100) {
+
+    for (let i = 0; i < attractorsQty; i++) {
+      const attractor = new Attractor({
+        position: new Vector3(), strength: 0.5, range: 600, speed: 0.12, boundingSize: boundingRange * 0.57, isVisible: false
+      });
+      this.#attractors.push(attractor);
+      this.scene.add(attractor.mesh);
+    }
+
   }
 
   #createObstacles() {
