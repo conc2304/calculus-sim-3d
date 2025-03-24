@@ -7,5 +7,7 @@ export default defineConfig({
   },
   plugins: [
     glsl()
-  ]
+  ],
+  base: "/calculus-sim-3d/"
+
 })
