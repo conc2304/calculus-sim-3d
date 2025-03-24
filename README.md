@@ -2,6 +2,8 @@
 
 This is a general template for ThreeJS applications. It uses [ViteJS](https://vitejs.dev/) to create the bundle and [Tweakpane](https://github.com/cocopon/tweakpane) for live updates.
 
+Homepage: https://conc2304.github.io/calculus-sim-3d/
+
 # Before we start
 This has been developed with NodeJS `16.11.0`; it should work with other versions too, but in case something doesn't work I recommend to switch to version `16.11.0` with [nvm](https://github.com/nvm-sh/nvm).
 
