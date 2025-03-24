@@ -1,4 +1,4 @@
-# ThreeJS starter
+# Calculus Simulations Three.js
 
 This is a general template for ThreeJS applications. It uses [ViteJS](https://vitejs.dev/) to create the bundle and [Tweakpane](https://github.com/cocopon/tweakpane) for live updates.
 
